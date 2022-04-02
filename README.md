@@ -12,7 +12,7 @@
 ```
     python image_classifier_interpreter.py
 ```
-- Result show where the classifier pay attention, giving a litter bit explanation of its prediction.
+- Result shows where the classifier pay attention, giving a litter bit explanation of its prediction.
 ![](data/test_image/explain_result.jpg)
 
 
