@@ -22,7 +22,7 @@ from torch.nn.functional import softmax
 from tool_box import file_utils
 from path_utils import get_data_dir
 
-TEST_IMAGE_FILE = os.path.join(get_data_dir(), "test_image", "../data/test_image/explanation/dog_smart.jpg")
+TEST_IMAGE_FILE = os.path.join(get_data_dir(), "test_image", "dog_smart.jpg")
 
 
 class ImageClassifier(object):
