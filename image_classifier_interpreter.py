@@ -17,6 +17,7 @@ from skimage.segmentation import mark_boundaries
 
 from models.classifier import ImageClassifier
 from path_utils import get_data_dir
+from tool_box.cv2_utils import read_rgb
 
 if __name__ == "__main__":
     img_classifier = ImageClassifier()
@@ -24,13 +25,12 @@ if __name__ == "__main__":
 
     def explain_it(img_file: str) -> np.ndarray:
         label_index, label_name = img_classifier.test_image(img_file)
-        resized, image = img_classifier.load_and_preprocess(img_file)
-
-        explanation = explainer.explain_instance(image, img_classifier, top_labels=5, hide_color=0, num_samples=100)
-        temp, mask = explanation.get_image_and_mask(label_index, positive_only=True, num_features=5, hide_rest=True)
-        resized = resized[:, :, ::-1] / 255.
-        img_wt_bdry = mark_boundaries(temp / 2 + 0.5, mask)
-        img_to_show = np.concatenate((resized, img_wt_bdry), axis=1)
+        img = read_rgb(img_file)
+        explanation = explainer.explain_instance(img, img_classifier, top_labels=5, hide_color=0, num_samples=100)
+        _, mask = explanation.get_image_and_mask(label_index, positive_only=True, num_features=5, hide_rest=True)
+        img_norm = img / 255.
+        img_wt_bdry = mark_boundaries(img_norm, mask)
+        img_to_show = np.concatenate((img_norm, img_wt_bdry), axis=1)
         return img_to_show
 
     image_dir = os.path.join(get_data_dir(), "test_image")

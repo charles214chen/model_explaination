@@ -16,9 +16,9 @@ import cv2
 import numpy as np
 import torch
 import torchvision.models as models
-from torchvision import transforms
 from torch.nn.functional import softmax
 
+from models.imagenet_preprocess import preprocess, Normalize
 from tool_box import file_utils
 from path_utils import get_data_dir
 
@@ -34,62 +34,74 @@ class ImageClassifier(object):
 
         self.model.eval()
 
-        self.normalizer = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                               std=[0.229, 0.224, 0.225])
-        self.img_size = 224
+        self.normalizer = Normalize()
 
         self.index_to_label = _get_class_index()
 
     def __call__(self, img: np.ndarray):
         """
         Args:
-            img: B x 224 x 224 x 3. rgb or bgr ?
+            img: h x w x 3. rgb or B x h x w x 3
 
         Returns:
             prob: np.ndarray. shape of B x 1000
         """
-        return self._inference(img)
+        if img.ndim == 4:
+            img_batch = torch.stack(([preprocess(img_) for img_ in img]), dim=0)
+        else:
+            img_batch = preprocess(img)[None, ...]
+        return self.inference(img_batch)
 
-    def _inference(self, img: np.ndarray):
-        img = np.transpose(img, (0, 3, 1, 2))
-        img_tensor = torch.tensor(img, dtype=torch.float)
-        img_tensor = self.normalizer(img_tensor)
+    def inference(self, img: torch.Tensor):
+        """
+        Args:
+            img: B x 3 x 224 x 224
+        Returns:
+            prob: np.ndarray
+        """
         with torch.no_grad():
-            logits = self.model(img_tensor)  # B x 1000
-        prob = softmax(logits, dim=1).cpu().numpy()
+            logits = self.inference_with_grad(img)
+        prob = softmax(logits, dim=1)
+        prob = prob.cpu().numpy()
         return prob
 
-    def _get_label_name(self, index: int) -> str:
+    def inference_with_grad(self, img: torch.Tensor):
+        """
+        Args:
+            img: B x 3 x 224 x 224
+        Returns:
+        """
+        img_tensor = self.normalizer(img)
+        logits = self.model(img_tensor)  # B x 1000
+        return logits
+
+    def get_label_name(self, index: int) -> str:
         return self.index_to_label[str(index)][1]
 
-    def load_and_preprocess(self, img_file: str):
+    @staticmethod
+    def load_and_preprocess(img_file: str):
         """
-        预处理,包含读取，resize和像素值归一化到0～1
+        预处理,包含读取，resize
         Args:
             img_file:
         Returns:
-            normed: np.ndarray. shape 224 x 224 x 3
+            img_resized : torch.Tensor. 3 x 224 x 224
         """
         img = cv2.imread(img_file)
-        # reshape
-        img_resized = self._resize(img)
-
-        # norm to [0, 1], transpose, to-tensor
-        normed = img_resized / 255  # 224 x 224 x 3
-        return img_resized, normed
-
-    def _resize(self, img: np.ndarray):
-        return cv2.resize(img, dsize=(self.img_size, self.img_size), interpolation=cv2.INTER_CUBIC)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_resized = preprocess(img)
+        return img_resized
 
     def test_image(self, image_file: str = None) -> (int, str):
         if image_file is None:
             image_file = TEST_IMAGE_FILE
         assert os.path.exists(image_file), f"File not exist.{image_file}"
-        _, img = self.load_and_preprocess(image_file)  # 预处理
-        prob = self._inference(img[np.newaxis, ...])[0]
+        img = self.load_and_preprocess(image_file)  # read / to-tensor / resize
+        print(f"img shape: {img.shape}")
+        prob = self.inference(img[None, ...])[0]
         index_max = np.argmax(prob)
         prob_max = prob[index_max]
-        label_name = self._get_label_name(index_max)
+        label_name = self.get_label_name(index_max)
         print(f"Image file: {image_file}\n"
               f"Max prob  : {prob_max}\n"
               f"Index     : {index_max}\n"
